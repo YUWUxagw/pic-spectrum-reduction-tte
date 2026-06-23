@@ -1,69 +1,333 @@
-"""Figures 2: KM survival + AJ CIF (combined) — using pipeline event_status"""
-import pandas as pd, numpy as np
-from lifelines import KaplanMeierFitter, AalenJohansenFitter
+"""Figure 3: Publication-quality Forest Plot"""
+
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
-df = pd.read_csv(r'F:\test\output\cloned_trials_weighted.csv')
-TAU = 672
+# ==========================================================
+# DATA
+# ==========================================================
 
-# Time-to-event using pipeline's own event_status (0=censor, 1=outcome, 2=competing death)
-df['fu'] = (pd.to_datetime(df['followup_end_time']) - pd.to_datetime(df['followup_start_time'])).dt.total_seconds()/3600
-df['tte'] = np.minimum(np.where(df['outcome_occurred']==1, df['outcome_hour_from_landmark'], df['fu']), TAU)
+results = [
+    ("Primary: IPCW-weighted Cox", 0.392, 0.322, 0.477, '#2C3E50', 'primary'),
 
-mask_red = df['assigned_strategy'] == 'spectrum_reduction'
-mask_cb  = df['assigned_strategy'] == 'continue_broad'
+    ("S1: Exclude CoNS outcomes", 0.377, 0.300, 0.474, '#2980B9', 'sens'),
+    ("S2: Allowable gap = 12 h", 0.392, 0.322, 0.477, '#2980B9', 'sens'),
+    ("S3: Exclude unrecognized baseline resistance", 0.115, 0.072, 0.184, '#2980B9', 'sens'),
+    ("S4: First ICU episode only", 0.381, 0.312, 0.466, '#2980B9', 'sens'),
+    ("S5: Exclude ICD-only infection context", 0.391, 0.322, 0.475, '#2980B9', 'sens'),
+    ("S6: Exclude single-drug stop", 0.262, 0.196, 0.352, '#2980B9', 'sens'),
+    ("S7: Follow-up from end of grace period", 0.090, 0.053, 0.151, '#2980B9', 'sens'),
 
-colors = {'red': '#27AE60', 'cb': '#E74C3C'}
-lbls   = {'red': 'Spectrum Reduction', 'cb': 'Continue Broad'}
+    ("Multivariable-adjusted Cox (24 covariates)", 0.380, 0.311, 0.465, '#1E8449', 'adj'),
+    ("PS-IPTW (propensity score)", 0.377, 0.310, 0.459, '#1E8449', 'adj'),
+    ("IPCW × IPTW (doubly weighted)", 0.383, 0.314, 0.467, '#1E8449', 'adj'),
+    ("Fine-Gray subdistribution HR", 0.396, 0.294, 0.535, '#1E8449', 'adj'),
+]
 
-fig, (axA, axB) = plt.subplots(1, 2, figsize=(14, 6), facecolor='white')
+n = len(results)
 
-# === Panel A: KM survival ===
-for arm, mask in [('red',mask_red), ('cb',mask_cb)]:
-    sub = df[mask].copy()
-    kmf = KaplanMeierFitter()
-    kmf.fit(sub['tte'], event_observed=(sub['event_status']==1).astype(int),
-            weights=sub['ipcw_weight'], label=lbls[arm])
-    kmf.plot_survival_function(ax=axA, color=colors[arm], linewidth=2.5)
+# ==========================================================
+# FIGURE LAYOUT
+# ==========================================================
 
-axA.set_xlim(0,TAU); axA.set_ylim(0.72,1.0)
-axA.set_xlabel('Time from Landmark (hours)', fontsize=11)
-axA.set_ylabel('Event-Free Survival Probability', fontsize=11)
-axA.set_title('A. IPCW-Weighted Kaplan-Meier Event-Free Survival', fontsize=12, fontweight='bold')
-axA.legend(fontsize=10)
-for x,l in [(168,'7d'),(336,'14d'),(672,'28d')]:
-    axA.axvline(x=x,color='gray',linestyle='--',alpha=0.3)
-    axA.text(x-35,0.725,l,fontsize=8,color='gray')
-axA.annotate('94.7%',xy=(672,0.96),xytext=(690,0.96),fontsize=10,color=colors['red'],fontweight='bold',ha='left')
-axA.annotate('76.7%',xy=(672,0.755),xytext=(690,0.755),fontsize=10,color=colors['cb'],fontweight='bold',ha='left')
+fig = plt.figure(
+    figsize=(12, 7),
+    facecolor="white"
+)
 
-# === Panel B: AJ CIF ===
-for arm, mask in [('red',mask_red), ('cb',mask_cb)]:
-    sub = df[mask].copy()
-    ajf = AalenJohansenFitter(calculate_variance=False)
-    ajf.fit(durations=sub['tte'].values/24, event_observed=sub['event_status'].values,
-            weights=sub['ipcw_weight'].values, label=lbls[arm], event_of_interest=1)
-    c = ajf.cumulative_density_
-    t = c.index.values
-    v = c.values.flatten() * 100
-    axB.fill_between(t*24, v, alpha=0.12, color=colors[arm])
-    axB.plot(t*24, v, color=colors[arm], linewidth=2.5, label=lbls[arm])
+gs = fig.add_gridspec(
+    1,
+    3,
+    width_ratios=[3.0, 5.0, 1.5],
+    wspace=0.02
+)
 
-axB.set_xlim(0,TAU); axB.set_ylim(0,25)
-axB.set_xlabel('Time from Landmark (hours)', fontsize=11)
-axB.set_ylabel('Cumulative Incidence (%)', fontsize=11)
-axB.set_title('B. Aalen-Johansen Cumulative Incidence\n(Death as Competing Event)', fontsize=12, fontweight='bold')
-axB.legend(fontsize=10)
-for x,l in [(168,'7d'),(336,'14d'),(672,'28d')]:
-    axB.axvline(x=x,color='gray',linestyle='--',alpha=0.3)
-    axB.text(x-35,0.7,l,fontsize=8,color='gray')
-axB.annotate('21.6%',xy=(672,21.55),xytext=(690,22.2),fontsize=10,color=colors['cb'],fontweight='bold',ha='left')
-axB.annotate('5.2%',xy=(672,5.23),xytext=(690,5.9),fontsize=10,color=colors['red'],fontweight='bold',ha='left')
+ax_label = fig.add_subplot(gs[0, 0])
+ax_forest = fig.add_subplot(gs[0, 1])
+ax_num = fig.add_subplot(gs[0, 2])
 
-fig.suptitle('Figure 3. IPCW-Weighted Kaplan-Meier Event-Free Survival and Aalen-Johansen Cumulative Incidence \nof Resistant-Organism Detection, by Assigned Antibiotic Strategy', fontsize=14, fontweight='bold', y=1.02)
-fig.tight_layout()
-fig.savefig(r'F:\test\Figure3_Combined.tiff', dpi=300, bbox_inches='tight', facecolor='white')
+# ==========================================================
+# LABEL COLUMN
+# ==========================================================
+
+ax_label.set_xlim(0, 1)
+ax_label.set_ylim(-0.8, n + 0.8)
+ax_label.axis("off")
+
+ax_label.text(
+    0,
+    n + 0.3,
+    "Analysis",
+    fontsize=10,
+    fontweight="bold"
+)
+
+# ==========================================================
+# NUMBER COLUMN
+# ==========================================================
+
+ax_num.set_xlim(0, 1)
+ax_num.set_ylim(-0.8, n + 0.8)
+ax_num.axis("off")
+
+ax_num.text(
+    0,
+    n + 0.3,
+    "HR (95% CI)",
+    fontsize=10,
+    fontweight="bold"
+)
+
+# ==========================================================
+# FOREST AXIS
+# ==========================================================
+
+ax_forest.set_ylim(-0.8, n + 0.8)
+ax_forest.set_xscale("log")
+
+ax_forest.set_xlim(0.06, 0.65)
+
+ax_forest.set_xticks(
+    [0.08, 0.10, 0.15, 0.20, 0.30, 0.40, 0.60]
+)
+
+ax_forest.set_xticklabels(
+    ["0.08", "0.10", "0.15", "0.20", "0.30", "0.40", "0.60"]
+)
+
+ax_forest.set_yticks([])
+
+ax_forest.set_xlabel(
+    "Hazard Ratio",
+    fontsize=11
+)
+
+# ==========================================================
+# REFERENCE LINE
+# ==========================================================
+
+ax_forest.axvline(
+    1.0,
+    color="#E74C3C",
+    lw=1.0,
+    ls="--",
+    alpha=0.5
+)
+
+# ==========================================================
+# PLOT ROWS
+# ==========================================================
+
+for i, (label, hr, lo, hi, color, kind) in enumerate(results):
+
+    y = n - i - 1
+
+    if kind == "primary":
+        marker = "D"
+        ms = 9
+        lw = 2.8
+        fw = "bold"
+    else:
+        marker = "s"
+        ms = 6.5
+        lw = 1.8
+        fw = "normal"
+
+    # --------------------------
+    # Left labels
+    # --------------------------
+
+    ax_label.text(
+        0.00,
+        y,
+        label,
+        fontsize=9,
+        va="center",
+        fontweight=fw
+    )
+
+    # --------------------------
+    # Forest plot
+    # --------------------------
+
+    ax_forest.plot(
+        [lo, hi],
+        [y, y],
+        color=color,
+        lw=lw,
+        alpha=0.9,
+        solid_capstyle="round"
+    )
+
+    ax_forest.plot(
+        hr,
+        y,
+        marker=marker,
+        color=color,
+        markersize=ms,
+        markeredgecolor="white",
+        markeredgewidth=0.8
+    )
+
+    # --------------------------
+    # Right numbers
+    # --------------------------
+
+    ax_num.text(
+        0.0,
+        y,
+        f"{hr:.3f} ({lo:.3f}–{hi:.3f})",
+        fontsize=8.5,
+        family="monospace",
+        va="center"
+    )
+
+# ==========================================================
+# SECTION HEADERS
+# ==========================================================
+
+sens_y = n - 1.6
+
+ax_label.text(
+    0,
+    sens_y,
+    "Sensitivity analyses",
+    fontsize=9,
+    fontweight="bold",
+    color="gray",
+    style="italic"
+)
+
+adj_y = 2.4
+
+ax_label.text(
+    0,
+    adj_y,
+    "Adjusted and propensity-score analyses",
+    fontsize=9,
+    fontweight="bold",
+    color="gray",
+    style="italic"
+)
+
+# ==========================================================
+# DIVIDER
+# ==========================================================
+
+for ax in [ax_label, ax_forest, ax_num]:
+
+    ax.axhline(
+        y=3.5,
+        color="#E5E7E9",
+        lw=1
+    )
+
+# ==========================================================
+# FAVOR DIRECTION
+# ==========================================================
+
+ax_forest.text(
+    0.07,
+    n + 1.0,
+    "← Favors Spectrum Reduction",
+    fontsize=9,
+    fontweight="bold",
+    color="#1E8449"
+)
+
+ax_forest.text(
+    0.33,
+    n + 1.0,
+    "Favors Continue Broad →",
+    fontsize=9,
+    fontweight="bold",
+    color="#C0392B"
+)
+
+# ==========================================================
+# STYLE
+# ==========================================================
+
+for sp in ["top", "right", "left"]:
+    ax_forest.spines[sp].set_visible(False)
+
+ax_forest.spines["bottom"].set_color("#CCCCCC")
+
+ax_forest.grid(
+    axis="x",
+    alpha=0.25,
+    linewidth=0.4
+)
+
+ax_forest.set_axisbelow(True)
+
+# ==========================================================
+# LEGEND
+# ==========================================================
+
+legend_elements = [
+
+    Line2D(
+        [0],[0],
+        marker='D',
+        color='w',
+        markerfacecolor='#2C3E50',
+        markersize=8,
+        label='Primary analysis'
+    ),
+
+    Line2D(
+        [0],[0],
+        marker='s',
+        color='w',
+        markerfacecolor='#2980B9',
+        markersize=6,
+        label='Sensitivity analyses'
+    ),
+
+    Line2D(
+        [0],[0],
+        marker='s',
+        color='w',
+        markerfacecolor='#1E8449',
+        markersize=6,
+        label='Adjusted analyses'
+    )
+]
+
+ax_forest.legend(
+    handles=legend_elements,
+    loc="lower left",
+    fontsize=8,
+    frameon=False
+)
+
+# ==========================================================
+# TITLE
+# ==========================================================
+
+fig.suptitle(
+    "Figure 2. Forest Plot of Hazard Ratios for Resistant-Organism Detection",
+    fontsize=13,
+    fontweight="bold",
+    y=0.98
+)
+
+# ==========================================================
+# SAVE
+# ==========================================================
+
+fig.savefig(
+    r"F:\test\Figure2_Publication_Forest.tiff",
+    dpi=600,
+    bbox_inches="tight",
+    facecolor="white"
+)
+
+
 plt.close()
-print('Figure 3 saved — AJ CIF now uses event_status (5.23% / 21.55%)')
+
+print("Figure 2 saved")
