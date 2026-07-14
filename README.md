@@ -1,4 +1,4 @@
-# Code for "Antibiotic Spectrum Reduction Versus Continued Broad-Spectrum Therapy in Critically Ill Children: A Target Trial Emulation"
+# Code for "Early Antibiotic De-intensification and Resistant-Organism Detection in Pediatric Intensive Care: A Target Trial Emulation"
 
 ## Overview
 
